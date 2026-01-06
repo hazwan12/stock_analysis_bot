@@ -249,6 +249,10 @@ class StockUniverseScanner:
                         results.append(result)
                         completed += 1
                         
+                        # Show progress with status
+                        status_emoji = "✓" if result.status == "OK" else "✗"
+                        print(f"{status_emoji} {symbol}: {result.status}")
+                        
                         if completed % 10 == 0:
                             elapsed = time.time() - start_time
                             rate = completed / elapsed
@@ -257,6 +261,8 @@ class StockUniverseScanner:
                             print(f"Progress: {completed}/{len(symbols)} ({completed/len(symbols)*100:.1f}%) | ETA: {eta/60:.1f} min")
                     except Exception as e:
                         print(f"✗ Failed {symbol}: {e}")
+                        # Still append a failed result
+                        results.append(StockScore(symbol=symbol, status="ERROR", error_msg=str(e)))
         else:
             print(f"📊 Sequential processing")
             results = []
@@ -289,7 +295,8 @@ class StockUniverseScanner:
         print(f"{'='*80}")
         print(f"Total time: {elapsed/60:.1f} minutes")
         print(f"Stocks analyzed: {len(results)}")
-        print(f"Avg time/stock: {elapsed/len(results):.1f} seconds")
+        if len(results) > 0:
+            print(f"Avg time/stock: {elapsed/len(results):.1f} seconds")
         print(f"{'='*80}\n")
         
         self._display_top_stocks(df, top_n, mode)

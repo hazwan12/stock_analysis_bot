@@ -1,8 +1,6 @@
 """
 Stock Analysis Bot - Main Execution File
-
-This is the primary entry point for running the stock analysis bot.
-Choose from various analysis modes and features.
+Portfolio-first approach with improved user experience
 """
 
 import sys
@@ -18,11 +16,16 @@ from modules.trend_analyzer import TrendAnalyzer
 from modules.backtesting import BacktestEngine
 from modules.walk_forward import WalkForwardAnalyzer
 from modules.universe_scanner import StockUniverseScanner
+from modules.portfolio_manager import PortfolioManager
+from modules.portfolio_recommender import PortfolioRecommender
 from utils.logger import setup_logger
 import config
 
 # Setup logging
 logger = setup_logger()
+
+# Global portfolio manager
+pm = PortfolioManager()
 
 
 def print_header(title):
@@ -32,364 +35,558 @@ def print_header(title):
     print(f"{'='*80}\n")
 
 
-def analyze_single_stock(symbol: str):
-    """Analyze a single stock with current signals"""
-    print_header(f"ANALYZING {symbol}")
-    
-    api_client = MooMooAPIClient()
-    api_client.connect()
-    
-    # Fetch data
-    data = api_client.get_historical_data(symbol, days=100)
-    
-    # Analyze
-    analyzer = TrendAnalyzer(data)
-    results = analyzer.analyze()
-    
-    # Display results
-    print(f"Symbol: {symbol}")
-    print(f"Current Price: ${results['current_price']:.2f}")
-    print(f"\nRECOMMENDATION: {results['recommendation']}")
-    print(f"Signal Score: {results['score']}")
-    print(f"\nTechnical Indicators:")
-    print(f"  RSI: {results['rsi']:.2f}")
-    print(f"  MACD: {results['macd']:.4f}")
-    print(f"  Volume Ratio: {results['volume_ratio']:.2f}x")
-    print(f"\nSignals:")
-    for signal in results['signals']:
-        print(f"  {signal}")
-    
-    api_client.close()
-    return results
+def print_welcome():
+    """Print welcome screen"""
+    print_header("STOCK ANALYSIS BOT")
+    print("Developed for systematic trading with MooMoo")
+    print(f"Version: 1.0")
+    print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 
-def backtest_stock(symbol: str):
-    """Run backtest on a single stock"""
-    print_header(f"BACKTESTING {symbol}")
-    
-    api_client = MooMooAPIClient()
-    api_client.connect()
-    
-    # Fetch data
-    data = api_client.get_historical_data(symbol, days=config.BACKTEST_DAYS)
-    
-    # Run backtest
-    engine = BacktestEngine(
-        initial_capital=config.INITIAL_CAPITAL,
-        commission=config.BACKTEST_COMMISSION
-    )
-    
-    results = engine.run_backtest(
-        symbol=symbol,
-        data=data,
-        buy_threshold=config.DEFAULT_BUY_THRESHOLD,
-        sell_threshold=config.DEFAULT_SELL_THRESHOLD,
-        stop_loss_pct=config.DEFAULT_STOP_LOSS,
-        take_profit_pct=config.DEFAULT_TAKE_PROFIT
-    )
-    
-    # Plot results
-    engine.plot_results(symbol)
-    
-    api_client.close()
-    return results
-
-
-def walk_forward_test(symbol: str):
-    """Run walk-forward analysis on a stock"""
-    print_header(f"WALK-FORWARD TESTING {symbol}")
-    
-    api_client = MooMooAPIClient()
-    api_client.connect()
-    
-    # Fetch data
-    data = api_client.get_historical_data(symbol, days=750)
-    
-    # Create analyzer
-    wf_analyzer = WalkForwardAnalyzer(
-        symbol=symbol,
-        data=data,
-        initial_capital=config.INITIAL_CAPITAL,
-        train_window_days=config.WF_TRAIN_WINDOW,
-        test_window_days=config.WF_TEST_WINDOW,
-        step_size=config.WF_STEP_SIZE
-    )
-    
-    # Parameter grid
-    param_grid = {
-        'buy_threshold': [1, 2, 3],
-        'sell_threshold': [-1, -2, -3],
-        'stop_loss_pct': [0.03, 0.05, 0.07],
-        'take_profit_pct': [0.10, 0.15, 0.20]
-    }
-    
-    # Run analysis
-    results = wf_analyzer.run_walk_forward_test(param_grid)
-    
-    # Visualize and export
-    wf_analyzer.plot_walk_forward_results()
-    wf_analyzer.export_results()
-    
-    api_client.close()
-    return results
-
-
-def scan_universe(mode: str = 'quick'):
-    """Scan stock universe"""
-    print_header(f"UNIVERSE SCAN - {mode.upper()} MODE")
-    
-    scanner = StockUniverseScanner(
-        initial_capital=config.INITIAL_CAPITAL,
-        min_price=config.SCANNER_MIN_PRICE,
-        max_price=config.SCANNER_MAX_PRICE,
-        min_avg_volume=config.SCANNER_MIN_VOLUME,
-        max_workers=config.SCANNER_MAX_WORKERS
-    )
-    
-    scanner.connect()
-    
-    # Run scan
-    results = scanner.scan_universe(
-        mode=mode,
-        top_n=20,
-        parallel=True
-    )
-    
-    # Export results
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    filename = f"{config.SCAN_PATH}/scan_{mode}_{timestamp}.csv"
-    scanner.export_results(results, filename)
-    
-    scanner.close()
-    return results
-
-
-def full_pipeline(symbol: str):
-    """Run complete analysis pipeline on a stock"""
-    print_header(f"FULL ANALYSIS PIPELINE - {symbol}")
-    
-    print("Stage 1/3: Current Signal Analysis...")
-    signal_results = analyze_single_stock(symbol)
-    
-    print("\nStage 2/3: Backtesting...")
-    backtest_results = backtest_stock(symbol)
-    
-    print("\nStage 3/3: Walk-Forward Validation...")
-    wf_results = walk_forward_test(symbol)
-    
-    # Summary
-    print_header("PIPELINE SUMMARY")
-    print(f"Symbol: {symbol}")
-    print(f"\nCurrent Analysis:")
-    print(f"  Recommendation: {signal_results['recommendation']}")
-    print(f"  Signal Score: {signal_results['score']}")
-    
-    if 'error' not in backtest_results:
-        print(f"\nBacktest Results:")
-        print(f"  Total Return: {backtest_results['total_return']:+.2f}%")
-        print(f"  Win Rate: {backtest_results['win_rate']:.1f}%")
-        print(f"  Sharpe Ratio: {backtest_results['sharpe_ratio']:.2f}")
-    
-    if 'error' not in wf_results:
-        print(f"\nWalk-Forward Results:")
-        print(f"  Avg Return: {wf_results['avg_test_return']:+.2f}%")
-        print(f"  Consistency: {wf_results['consistency_score']:.1f}/100")
-        print(f"  Win Windows: {wf_results['win_rate_windows']:.1f}%")
-        print(f"  Degradation: {wf_results['degradation_pct']:+.1f}%")
-    
-    return {
-        'signals': signal_results,
-        'backtest': backtest_results,
-        'walk_forward': wf_results
-    }
-
-
-def interactive_menu():
-    """Interactive menu for selecting operations"""
+def portfolio_selection_menu():
+    """Main portfolio selection menu"""
     while True:
-        print_header("STOCK ANALYSIS BOT - MAIN MENU")
-        print("1. Analyze Single Stock (Current Signals)")
-        print("2. Backtest Single Stock")
-        print("3. Walk-Forward Test Single Stock")
-        print("4. Full Pipeline (All 3 analyses)")
-        print("5. Quick Universe Scan")
-        print("6. Backtest Universe Scan")
-        print("7. Full Universe Scan (Walk-Forward)")
-        print("8. Three-Tier Universe Scan (Quick → Backtest → Full)")
-        print("9. Exit")
+        print_header("SELECT OR CREATE PORTFOLIO")
+        
+        # List existing portfolios
+        portfolios = pm.list_portfolios()
+        
+        if portfolios:
+            print("YOUR PORTFOLIOS:")
+            print(f"{'ID':<5} {'Name':<30} {'Total Invested':<18} {'Created':<20}")
+            print("-" * 80)
+            for p in portfolios:
+                print(f"{p.portfolio_id:<5} {p.name:<30} ${p.total_invested:<17,.2f} {p.created_date:<20}")
+            print()
+        else:
+            print("📭 No portfolios found. Create your first portfolio to get started!\n")
+        
+        print("OPTIONS:")
+        print("  N  - Create New Portfolio")
+        if portfolios:
+            print("  [ID] - Select portfolio by ID (e.g., 1, 2, 3)")
+        print("  Q  - Quit")
         print()
         
-        choice = input("Enter your choice (1-9): ").strip()
+        choice = input("Your choice: ").strip().upper()
         
-        if choice == '1':
-            symbol = input("Enter stock symbol (e.g., US.AAPL): ").strip()
-            analyze_single_stock(symbol)
-            
-        elif choice == '2':
-            symbol = input("Enter stock symbol (e.g., US.AAPL): ").strip()
-            backtest_stock(symbol)
-            
-        elif choice == '3':
-            symbol = input("Enter stock symbol (e.g., US.AAPL): ").strip()
-            walk_forward_test(symbol)
-            
-        elif choice == '4':
-            symbol = input("Enter stock symbol (e.g., US.AAPL): ").strip()
-            full_pipeline(symbol)
-            
-        elif choice == '5':
-            scan_universe(mode='quick')
-            
-        elif choice == '6':
-            scan_universe(mode='backtest')
-            
-        elif choice == '7':
-            scan_universe(mode='full')
-            
-        elif choice == '8':
-            three_tier_scan()
-            
-        elif choice == '9':
-            print("\nExiting... Goodbye!")
-            break
-            
+        if choice == 'Q':
+            print("\n👋 Goodbye!")
+            return None
+        
+        elif choice == 'N':
+            portfolio = create_new_portfolio()
+            if portfolio:
+                return portfolio.portfolio_id
+        
         else:
-            print("Invalid choice. Please try again.")
+            # Try to parse as portfolio ID
+            try:
+                portfolio_id = int(choice)
+                portfolio = pm.get_portfolio(portfolio_id)
+                if portfolio:
+                    return portfolio_id
+                else:
+                    print(f"\n❌ Portfolio {portfolio_id} not found")
+            except ValueError:
+                print("\n❌ Invalid choice")
         
         input("\nPress Enter to continue...")
 
 
-def three_tier_scan():
-    """Run three-tier progressive universe scan"""
-    print_header("THREE-TIER UNIVERSE SCAN")
+def create_new_portfolio():
+    """Create a new portfolio"""
+    print_header("CREATE NEW PORTFOLIO")
     
-    scanner = StockUniverseScanner(
-        initial_capital=config.INITIAL_CAPITAL,
-        min_price=config.SCANNER_MIN_PRICE,
-        max_price=config.SCANNER_MAX_PRICE,
-        min_avg_volume=config.SCANNER_MIN_VOLUME,
-        max_workers=config.SCANNER_MAX_WORKERS
-    )
+    print("Set up your investment portfolio\n")
     
+    name = input("Portfolio Name (e.g., 'Growth Portfolio', 'Retirement Fund'): ").strip()
+    if not name:
+        print("❌ Portfolio name cannot be empty")
+        return None
+    
+    try:
+        print("\n💰 INVESTMENT AMOUNTS:")
+        initial_investment = float(input("Initial Investment Amount: $").strip().replace(',', ''))
+        recurring_amount = float(input("Monthly Recurring Investment: $").strip().replace(',', ''))
+        
+        print("\n📝 NOTES (Optional):")
+        notes = input("Strategy/Notes (press Enter to skip): ").strip()
+        
+        portfolio = pm.create_portfolio(name, initial_investment, recurring_amount, notes)
+        
+        if portfolio:
+            print(f"\n✅ Portfolio '{name}' created successfully!")
+            print(f"\n💡 Next steps:")
+            print(f"   1. Add your initial holdings")
+            print(f"   2. Generate recommendations")
+            print(f"   3. Start scanning for opportunities")
+            input("\nPress Enter to continue...")
+            return portfolio
+        
+    except ValueError:
+        print("❌ Invalid amount entered")
+        return None
+
+
+def portfolio_management_menu(portfolio_id: int):
+    """Portfolio management and scanning menu"""
+    while True:
+        portfolio = pm.get_portfolio(portfolio_id)
+        if not portfolio:
+            print("❌ Portfolio not found")
+            return
+        
+        # Get current portfolio status
+        holdings = pm.get_holdings(portfolio_id)
+        
+        # Get current prices for status
+        if holdings:
+            api_client = MooMooAPIClient()
+            api_client.connect()
+            current_prices = {}
+            for h in holdings:
+                data = api_client.get_historical_data(h.symbol, days=1)
+                if data is not None and len(data) > 0:
+                    current_prices[h.symbol] = data['close'].iloc[-1]
+            api_client.close()
+            
+            summary = pm.calculate_portfolio_value(portfolio_id, current_prices)
+        else:
+            summary = None
+        
+        # Display portfolio header
+        print_header(f"PORTFOLIO: {portfolio.name}")
+        
+        if summary:
+            total_return_color = "🟢" if summary['total_return_pct'] >= 0 else "🔴"
+            print(f"💰 Total Value: ${summary['total_value']:,.2f} | "
+                  f"Invested: ${summary['total_invested']:,.2f} | "
+                  f"{total_return_color} Return: {summary['total_return_pct']:+.2f}%")
+            print(f"📊 Holdings: {len(holdings)} positions | Cash: ${summary['cash_available']:,.2f}")
+        else:
+            print(f"💰 Total Invested: ${portfolio.total_invested:,.2f}")
+            print(f"📊 No holdings yet - Add your first stocks!")
+        
+        print()
+        print("="*80)
+        
+        print("\nPORTFOLIO MANAGEMENT:")
+        print("  1. View Portfolio Details")
+        print("  2. Add Holdings (Buy Stocks)")
+        print("  3. Sell Holdings")
+        print("  4. View Transaction History")
+        
+        print("\nRECOMMENDATIONS & SCANNING:")
+        print("  5. Generate Portfolio Recommendations")
+        print("  6. Execute Recommendations")
+        print("  7. Quick Universe Scan")
+        print("  8. Three-Tier Deep Scan")
+        
+        print("\nANALYSIS TOOLS:")
+        print("  9. Analyze Single Stock")
+        print("  10. Backtest Stock Strategy")
+        
+        print("\n  0. Back to Portfolio Selection")
+        print()
+        
+        choice = input("Your choice: ").strip()
+        
+        if choice == '0':
+            return
+        
+        elif choice == '1':
+            view_portfolio_details(portfolio_id)
+        
+        elif choice == '2':
+            add_holdings_to_portfolio(portfolio_id)
+        
+        elif choice == '3':
+            sell_holdings_from_portfolio(portfolio_id)
+        
+        elif choice == '4':
+            view_transaction_history(portfolio_id)
+        
+        elif choice == '5':
+            generate_portfolio_recommendations(portfolio_id)
+        
+        elif choice == '6':
+            execute_portfolio_recommendations(portfolio_id)
+        
+        elif choice == '7':
+            quick_scan_for_portfolio(portfolio_id)
+        
+        elif choice == '8':
+            deep_scan_for_portfolio(portfolio_id)
+        
+        elif choice == '9':
+            analyze_stock_for_portfolio(portfolio_id)
+        
+        elif choice == '10':
+            backtest_stock_for_portfolio(portfolio_id)
+        
+        else:
+            print("❌ Invalid choice")
+        
+        input("\nPress Enter to continue...")
+
+
+def view_portfolio_details(portfolio_id: int):
+    """View detailed portfolio information"""
+    print_header("PORTFOLIO DETAILS")
+    
+    portfolio = pm.get_portfolio(portfolio_id)
+    holdings = pm.get_holdings(portfolio_id)
+    
+    if not holdings:
+        print("📭 No holdings in this portfolio yet")
+        print("\n💡 Use option 2 to add your first stocks")
+        return
+    
+    # Get current prices
+    api_client = MooMooAPIClient()
+    api_client.connect()
+    
+    current_prices = {}
+    print("Fetching current prices...")
+    for h in holdings:
+        data = api_client.get_historical_data(h.symbol, days=1)
+        if data is not None and len(data) > 0:
+            current_prices[h.symbol] = data['close'].iloc[-1]
+    
+    api_client.close()
+    
+    # Display summary
+    pm.display_portfolio_summary(portfolio_id, current_prices)
+
+
+def add_holdings_to_portfolio(portfolio_id: int):
+    """Add holdings to portfolio"""
+    print_header("ADD HOLDINGS")
+    
+    print("Add stocks to your portfolio\n")
+    
+    while True:
+        symbol = input("Stock Symbol (e.g., US.AAPL) or 'done' to finish: ").strip().upper()
+        
+        if symbol.lower() == 'done':
+            break
+        
+        try:
+            shares = float(input(f"Number of shares: ").strip())
+            price = float(input(f"Purchase price per share: $").strip().replace(',', ''))
+            
+            success = pm.add_holding(portfolio_id, symbol, shares, price)
+            
+            if success:
+                print(f"✅ Added to portfolio")
+            
+            another = input("\nAdd another stock? (y/n): ").strip().lower()
+            if another != 'y':
+                break
+                
+        except ValueError:
+            print("❌ Invalid input")
+
+
+def sell_holdings_from_portfolio(portfolio_id: int):
+    """Sell holdings from portfolio"""
+    print_header("SELL HOLDINGS")
+    
+    holdings = pm.get_holdings(portfolio_id)
+    
+    if not holdings:
+        print("📭 No holdings to sell")
+        return
+    
+    print("Your current holdings:")
+    for i, h in enumerate(holdings, 1):
+        print(f"  {i}. {h.symbol}: {h.shares:.2f} shares @ ${h.average_price:.2f} avg")
+    print()
+    
+    try:
+        choice = int(input("Select holding to sell (number): ").strip())
+        if 1 <= choice <= len(holdings):
+            holding = holdings[choice - 1]
+            
+            print(f"\nSelling {holding.symbol} ({holding.shares:.2f} shares available)")
+            shares = float(input("Number of shares to sell: ").strip())
+            price = float(input(f"Sale price per share: $").strip().replace(',', ''))
+            
+            success = pm.sell_holding(portfolio_id, holding.symbol, shares, price)
+            
+            if success:
+                proceeds = shares * price
+                print(f"\n✅ Sold {shares} shares for ${proceeds:,.2f}")
+        else:
+            print("❌ Invalid selection")
+    
+    except ValueError:
+        print("❌ Invalid input")
+
+
+def view_transaction_history(portfolio_id: int):
+    """View transaction history"""
+    print_header("TRANSACTION HISTORY")
+    
+    transactions = pm.get_transactions(portfolio_id, limit=20)
+    
+    if not transactions:
+        print("📭 No transactions yet")
+        return
+    
+    print(f"Last {len(transactions)} transactions:\n")
+    print(f"{'Date':<20} {'Type':<6} {'Symbol':<10} {'Shares':<10} {'Price':<12} {'Total':<15}")
+    print("-" * 80)
+    
+    for t in transactions:
+        type_emoji = "🟢" if t.transaction_type == "BUY" else "🔴"
+        print(f"{t.transaction_date:<20} {type_emoji}{t.transaction_type:<5} {t.symbol:<10} "
+              f"{t.shares:<10.2f} ${t.price:<11.2f} ${t.total_amount:<14,.2f}")
+
+
+def generate_portfolio_recommendations(portfolio_id: int):
+    """Generate recommendations for portfolio"""
+    print_header("GENERATE RECOMMENDATIONS")
+    
+    portfolio = pm.get_portfolio(portfolio_id)
+    
+    # Check if portfolio has holdings
+    holdings = pm.get_holdings(portfolio_id)
+    if not holdings:
+        print("⚠️  No holdings found. Recommendations will focus on new opportunities.")
+        print()
+    
+    # Ask about additional cash
+    print(f"Current recurring amount: ${portfolio.recurring_amount:,.2f}")
+    add_more = input("\nAdd additional cash for this investment cycle? (y/n): ").strip().lower()
+    
+    available_cash = None
+    if add_more == 'y':
+        try:
+            additional = float(input("Enter additional amount: $").strip().replace(',', ''))
+            available_cash = portfolio.recurring_amount + additional
+            print(f"\n💵 Total available for investment: ${available_cash:,.2f}")
+        except ValueError:
+            print("❌ Invalid amount, using recurring amount only")
+    
+    # Generate recommendations
+    print("\n🔍 Analyzing portfolio and scanning opportunities...")
+    print("This may take a few minutes...\n")
+    
+    recommender = PortfolioRecommender(pm)
+    recommendations = recommender.generate_recommendations(portfolio_id, available_cash)
+    
+    if recommendations:
+        print(f"\n✅ Generated {len(recommendations)} recommendations")
+        print("💡 Use option 6 to execute these recommendations")
+
+
+def execute_portfolio_recommendations(portfolio_id: int):
+    """Execute portfolio recommendations interactively"""
+    print_header("EXECUTE RECOMMENDATIONS")
+    
+    recommendations = pm.get_recommendations(portfolio_id)
+    
+    if not recommendations:
+        print("📭 No pending recommendations")
+        print("\n💡 Use option 5 to generate recommendations first")
+        return
+    
+    print(f"You have {len(recommendations)} pending recommendations\n")
+    
+    recommender = PortfolioRecommender(pm)
+    recommender.execute_recommendations_interactive(portfolio_id)
+
+
+def quick_scan_for_portfolio(portfolio_id: int):
+    """Quick universe scan optimized for portfolio"""
+    print_header("QUICK UNIVERSE SCAN")
+    
+    print("🔍 Scanning stock universe for opportunities...")
+    print("Mode: Quick (5-10 minutes)\n")
+    
+    scanner = StockUniverseScanner()
+    scanner.connect()
+    
+    # Get current holdings to exclude
+    holdings = pm.get_holdings(portfolio_id)
+    held_symbols = [h.symbol for h in holdings]
+    
+    results = scanner.scan_universe(mode='quick', top_n=20, parallel=True)
+    
+    # Filter and show results
+    print(f"\n{'='*80}")
+    print("TOP OPPORTUNITIES (excluding your current holdings)")
+    print(f"{'='*80}\n")
+    
+    new_opportunities = results[~results['symbol'].isin(held_symbols)]
+    
+    if len(new_opportunities) > 0:
+        display_cols = ['symbol', 'current_recommendation', 'current_signal_score', 
+                       'current_price', 'overall_score']
+        print(new_opportunities.head(10)[display_cols].to_string(index=False))
+    else:
+        print("No new opportunities found")
+    
+    # Export
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f"{config.SCAN_PATH}/portfolio_{portfolio_id}_scan_{timestamp}.csv"
+    scanner.export_results(results, filename)
+    
+    scanner.close()
+
+
+def deep_scan_for_portfolio(portfolio_id: int):
+    """Three-tier deep scan for portfolio"""
+    print_header("THREE-TIER DEEP SCAN")
+    
+    print("🔍 Performing comprehensive analysis...")
+    print("This will take 30-60 minutes but provides high-confidence recommendations\n")
+    
+    confirm = input("Continue? (y/n): ").strip().lower()
+    if confirm != 'y':
+        return
+    
+    scanner = StockUniverseScanner()
     scanner.connect()
     
     # Tier 1: Quick Scan
     print("\n" + "="*80)
     print("TIER 1: QUICK SCAN")
     print("="*80)
-    quick_results = scanner.scan_universe(mode='quick', top_n=30)
+    quick_results = scanner.scan_universe(mode='quick', top_n=30, parallel=True)
     
-    # Create watchlist for tier 2
-    tier1_watchlist = scanner.create_watchlist(quick_results, {
-        'min_score': 20,
-        'recommendations': ['🟢 STRONG BUY', '🟡 BUY']
-    })
-    
-    # Tier 2: Backtest Scan
+    # Tier 2: Backtest top candidates
     print("\n" + "="*80)
-    print("TIER 2: BACKTEST SCAN")
+    print("TIER 2: BACKTEST VALIDATION")
     print("="*80)
-    backtest_results = scanner.scan_universe(
-        symbols=tier1_watchlist,
-        mode='backtest',
-        top_n=15
-    )
+    tier1_symbols = quick_results.nlargest(15, 'overall_score')['symbol'].tolist()
+    backtest_results = scanner.scan_universe(symbols=tier1_symbols, mode='backtest', 
+                                            top_n=10, parallel=False)
     
-    # Create watchlist for tier 3
-    tier2_watchlist = scanner.create_watchlist(backtest_results, {
-        'min_return': 5.0,
-        'min_score': 50
-    })
-    
-    # Tier 3: Walk-Forward Scan
+    # Tier 3: Walk-forward on best
     print("\n" + "="*80)
-    print("TIER 3: WALK-FORWARD SCAN")
+    print("TIER 3: WALK-FORWARD VALIDATION")
     print("="*80)
-    full_results = scanner.scan_universe(
-        symbols=tier2_watchlist,
-        mode='full',
-        top_n=10
-    )
+    tier2_symbols = backtest_results.nlargest(8, 'overall_score')['symbol'].tolist()
+    final_results = scanner.scan_universe(symbols=tier2_symbols, mode='full', 
+                                         top_n=5, parallel=False)
     
-    # Final watchlist
-    final_watchlist = scanner.create_watchlist(full_results, {
-        'min_return': 3.0,
-        'max_degradation': 40.0,
-        'min_consistency': 60.0
-    })
+    # Display final recommendations
+    print_header("DEEP SCAN RESULTS")
     
-    # Export all results
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    scanner.export_results(quick_results, 
-                          f"{config.SCAN_PATH}/tier1_quick_{timestamp}.csv")
-    scanner.export_results(backtest_results, 
-                          f"{config.SCAN_PATH}/tier2_backtest_{timestamp}.csv")
-    scanner.export_results(full_results, 
-                          f"{config.SCAN_PATH}/tier3_full_{timestamp}.csv")
+    print("🎯 HIGH-CONFIDENCE OPPORTUNITIES:\n")
     
-    # Summary
-    print_header("THREE-TIER SCAN COMPLETE")
-    print(f"Tier 1 (Quick): {len(quick_results)} stocks scanned → {len(tier1_watchlist)} qualified")
-    print(f"Tier 2 (Backtest): {len(tier1_watchlist)} stocks analyzed → {len(tier2_watchlist)} qualified")
-    print(f"Tier 3 (Walk-Forward): {len(tier2_watchlist)} stocks validated → {len(final_watchlist)} qualified")
-    print(f"\n🎯 FINAL HIGH-CONFIDENCE WATCHLIST:")
-    print(f"   {', '.join(final_watchlist)}")
+    if len(final_results) > 0:
+        for i, row in final_results.head(5).iterrows():
+            print(f"{row['rank']}. {row['symbol']} - {row['current_recommendation']}")
+            print(f"   WF Avg Return: {row['wf_avg_return']:+.2f}%")
+            print(f"   Consistency: {row['wf_consistency']:.1f}/100")
+            print(f"   Price: ${row['current_price']:.2f}")
+            print()
     
     scanner.close()
-    return final_watchlist
+
+
+def analyze_stock_for_portfolio(portfolio_id: int):
+    """Analyze a specific stock"""
+    print_header("ANALYZE SINGLE STOCK")
+    
+    symbol = input("Enter stock symbol (e.g., US.AAPL): ").strip().upper()
+    
+    api_client = MooMooAPIClient()
+    api_client.connect()
+    
+    print(f"\nFetching data for {symbol}...")
+    data = api_client.get_historical_data(symbol, days=100)
+    
+    if data is None or len(data) < 50:
+        print(f"❌ Unable to fetch data for {symbol}")
+        api_client.close()
+        return
+    
+    # Analyze
+    analyzer = TrendAnalyzer(data)
+    results = analyzer.analyze()
+    
+    # Display
+    print(f"\n{'='*80}")
+    print(f"ANALYSIS: {symbol}")
+    print(f"{'='*80}\n")
+    
+    print(f"Current Price: ${results['current_price']:.2f}")
+    print(f"Recommendation: {results['recommendation']}")
+    print(f"Signal Score: {results['score']}")
+    print(f"Signal Strength: {analyzer.get_signal_strength()}")
+    print(f"Risk Level: {analyzer.get_risk_level()}")
+    
+    print(f"\n📊 Technical Indicators:")
+    print(f"  RSI: {results['rsi']:.2f}")
+    print(f"  MACD: {results['macd']:.4f}")
+    print(f"  Volume Ratio: {results['volume_ratio']:.2f}x average")
+    print(f"  Volatility: {results['volatility']:.2f}%")
+    
+    print(f"\n📈 Signals Detected:")
+    for signal in results['signals']:
+        print(f"  {signal}")
+    
+    api_client.close()
+
+
+def backtest_stock_for_portfolio(portfolio_id: int):
+    """Backtest a stock strategy"""
+    print_header("BACKTEST STOCK STRATEGY")
+    
+    symbol = input("Enter stock symbol (e.g., US.AAPL): ").strip().upper()
+    
+    api_client = MooMooAPIClient()
+    api_client.connect()
+    
+    print(f"\nFetching historical data for {symbol}...")
+    data = api_client.get_historical_data(symbol, days=500)
+    
+    if data is None or len(data) < 100:
+        print(f"❌ Insufficient data for {symbol}")
+        api_client.close()
+        return
+    
+    # Run backtest
+    engine = BacktestEngine()
+    results = engine.run_backtest(symbol, data)
+    
+    # Plot results
+    if 'error' not in results:
+        plot = input("\nGenerate charts? (y/n): ").strip().lower()
+        if plot == 'y':
+            engine.plot_results(symbol)
+    
+    api_client.close()
 
 
 def main():
     """Main entry point"""
-    print_header("STOCK ANALYSIS BOT")
-    print("Developed for systematic trading with MooMoo")
-    print(f"Version: 1.0")
-    print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    
     # Create necessary directories
     os.makedirs(config.DATA_PATH, exist_ok=True)
     os.makedirs(config.SCAN_PATH, exist_ok=True)
     os.makedirs(config.BACKTEST_PATH, exist_ok=True)
     os.makedirs(config.CHART_PATH, exist_ok=True)
     
-    # Check for command line arguments
-    if len(sys.argv) > 1:
-        command = sys.argv[1].lower()
+    # Print welcome
+    print_welcome()
+    
+    # Main loop
+    while True:
+        # Portfolio selection
+        portfolio_id = portfolio_selection_menu()
         
-        if command == 'analyze' and len(sys.argv) > 2:
-            symbol = sys.argv[2]
-            analyze_single_stock(symbol)
-            
-        elif command == 'backtest' and len(sys.argv) > 2:
-            symbol = sys.argv[2]
-            backtest_stock(symbol)
-            
-        elif command == 'walkforward' and len(sys.argv) > 2:
-            symbol = sys.argv[2]
-            walk_forward_test(symbol)
-            
-        elif command == 'pipeline' and len(sys.argv) > 2:
-            symbol = sys.argv[2]
-            full_pipeline(symbol)
-            
-        elif command == 'scan':
-            mode = sys.argv[2] if len(sys.argv) > 2 else 'quick'
-            scan_universe(mode)
-            
-        elif command == 'threescan':
-            three_tier_scan()
-            
-        else:
-            print("Invalid command. Use:")
-            print("  python main.py analyze <SYMBOL>")
-            print("  python main.py backtest <SYMBOL>")
-            print("  python main.py walkforward <SYMBOL>")
-            print("  python main.py pipeline <SYMBOL>")
-            print("  python main.py scan [quick|backtest|full]")
-            print("  python main.py threescan")
-    else:
-        # Run interactive menu
-        interactive_menu()
+        if portfolio_id is None:
+            break
+        
+        # Portfolio management menu
+        portfolio_management_menu(portfolio_id)
+    
+    print("\n✅ Session ended. Happy trading! 📈")
 
 
 if __name__ == "__main__":
