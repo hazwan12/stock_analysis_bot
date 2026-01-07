@@ -244,28 +244,54 @@ class PortfolioRecommender:
         if not buy_recs or available_cash <= 0:
             return recommendations
         
-        # Calculate total buy cost if we follow all recommendations
-        total_cost = sum(r.get('estimated_cost', 0) for r in buy_recs)
+        # Sort by signal score (highest first) and price (ascending)
+        buy_recs.sort(key=lambda x: (x.get('signal_score', 0), -x['current_price']), reverse=True)
         
-        if total_cost <= available_cash:
-            # We have enough cash for all recommendations
-            return recommendations
+        # Smart allocation: prioritize affordable stocks with strong signals
+        remaining_cash = available_cash
+        allocated_recs = []
         
-        # Need to scale down or prioritize
-        # Allocate based on signal strength and diversification
-        
-        # Sort by signal score (highest first)
-        buy_recs.sort(key=lambda x: x.get('signal_score', 0), reverse=True)
-        
-        # Allocate cash proportionally
-        cash_per_stock = available_cash / len(buy_recs)
-        
+        # First pass: allocate to stocks we can afford at least 1 share
         for rec in buy_recs:
-            max_shares = int(cash_per_stock / rec['current_price'])
-            rec['target_shares'] = max(1, max_shares)
-            rec['estimated_cost'] = rec['target_shares'] * rec['current_price']
+            price = rec['current_price']
+            
+            if remaining_cash >= price:
+                # Calculate how many shares we can buy
+                # Use a reasonable portion of remaining cash (30-40% per stock for diversification)
+                allocation = min(remaining_cash * 0.35, remaining_cash)
+                max_shares = int(allocation / price)
+                
+                if max_shares >= 1:
+                    rec['target_shares'] = max_shares
+                    rec['estimated_cost'] = max_shares * price
+                    remaining_cash -= rec['estimated_cost']
+                    allocated_recs.append(rec)
+                else:
+                    # Can afford 1 share
+                    rec['target_shares'] = 1
+                    rec['estimated_cost'] = price
+                    remaining_cash -= price
+                    allocated_recs.append(rec)
+            else:
+                # Can't afford this stock, set to 0
+                rec['target_shares'] = 0
+                rec['estimated_cost'] = 0
+                allocated_recs.append(rec)
         
-        return other_recs + buy_recs
+        # If we couldn't allocate to any stock (all too expensive), allocate to cheapest
+        if all(r['target_shares'] == 0 for r in allocated_recs) and available_cash > 0:
+            # Find cheapest stock we can afford
+            affordable = [r for r in allocated_recs if r['current_price'] <= available_cash]
+            if affordable:
+                cheapest = min(affordable, key=lambda x: x['current_price'])
+                max_shares = int(available_cash / cheapest['current_price'])
+                cheapest['target_shares'] = max(1, max_shares)
+                cheapest['estimated_cost'] = cheapest['target_shares'] * cheapest['current_price']
+        
+        # Remove recommendations with 0 shares (too expensive)
+        final_buy_recs = [r for r in allocated_recs if r['target_shares'] > 0]
+        
+        return other_recs + final_buy_recs
     
     def _display_recommendations(self, recommendations: List[Dict], available_cash: float):
         """Display recommendations in a clear format"""
@@ -297,14 +323,28 @@ class PortfolioRecommender:
             for i, rec in enumerate(buys, 1):
                 cost = rec.get('estimated_cost', 0)
                 total_buy_cost += cost
-                print(f"{i}. {rec['symbol']}")
-                print(f"   Buy: {rec['target_shares']:.0f} shares @ ${rec['current_price']:.2f}")
-                print(f"   Estimated Cost: ${cost:,.2f}")
-                print(f"   Reason: {rec['reason']}")
-                print()
+                shares = rec.get('target_shares', 0)
+                
+                if shares > 0:
+                    print(f"{i}. {rec['symbol']}")
+                    print(f"   Buy: {shares:.0f} shares @ ${rec['current_price']:.2f}")
+                    print(f"   Estimated Cost: ${cost:,.2f}")
+                    print(f"   Reason: {rec['reason']}")
+                    print()
             
-            print(f"Total Buy Cost: ${total_buy_cost:,.2f}")
-            print(f"Remaining Cash: ${available_cash - total_buy_cost:,.2f}\n")
+            if total_buy_cost > 0:
+                print(f"Total Buy Cost: ${total_buy_cost:,.2f}")
+                print(f"Remaining Cash: ${available_cash - total_buy_cost:,.2f}\n")
+            else:
+                print("⚠️  No affordable stocks found with current cash.")
+                print(f"   Current cash: ${available_cash:,.2f}")
+                print(f"\n💡 Suggestions:")
+                print(f"   • Add more funds to your portfolio")
+                print(f"   • Wait for lower-priced opportunities")
+                print(f"   • Consider fractional shares (if broker supports)")
+                cheapest = min(buys, key=lambda x: x['current_price'])
+                print(f"   • Cheapest recommended stock: {cheapest['symbol']} @ ${cheapest['current_price']:.2f}")
+                print()
         
         if holds:
             print(f"⚪ HOLD POSITIONS ({len(holds)}):")
@@ -313,6 +353,13 @@ class PortfolioRecommender:
                 print(f"• {rec['symbol']}: {rec['target_shares']:.0f} shares @ ${rec['current_price']:.2f}")
                 print(f"  {rec['reason']}")
             print()
+        
+        if not buys and not sells and not holds:
+            print("📭 No recommendations generated")
+            print("\n💡 This could mean:")
+            print("   • No holdings to analyze")
+            print("   • No stocks meet the buy criteria")
+            print("   • Try running a universe scan first")
         
         print(f"{'='*80}\n")
     

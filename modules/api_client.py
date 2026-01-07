@@ -33,7 +33,7 @@ class MooMooAPIClient:
         try:
             from moomoo import OpenQuoteContext, RET_OK
             print(f"Attempting to connect to MooMoo OpenD at {self.host}:{self.port}...")
-            self.quote_ctx = OpenQuoteContext(host=self.host, port=self.port, is_encrypt=None)
+            self.quote_ctx = OpenQuoteContext(host=self.host, port=self.port)
             ret, data = self.quote_ctx.get_stock_quote(['US.AAPL'])
             if ret == RET_OK:
                 self.is_connected = True

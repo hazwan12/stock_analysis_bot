@@ -67,36 +67,34 @@ class StockUniverseScanner:
         self.results: List[StockScore] = []
         
     def get_stock_universe(self, market: str = "US") -> List[str]:
-        """Get list of stocks to scan"""
+        """Get list of stocks to scan (reduced for API compliance)"""
+        # Reduced to top 30 most liquid stocks for faster scanning
         us_stocks = [
-            # Tech
+            # Top Tech (10)
             'US.AAPL', 'US.MSFT', 'US.GOOGL', 'US.AMZN', 'US.META',
             'US.NVDA', 'US.TSLA', 'US.AMD', 'US.INTC', 'US.ORCL',
-            # Finance
-            'US.JPM', 'US.BAC', 'US.WFC', 'US.GS', 'US.MS',
-            'US.C', 'US.BLK', 'US.SCHW', 'US.AXP', 'US.V',
-            # Healthcare
-            'US.JNJ', 'US.UNH', 'US.PFE', 'US.ABBV', 'US.TMO',
-            'US.MRK', 'US.ABT', 'US.DHR', 'US.LLY', 'US.BMY',
-            # Consumer
-            'US.WMT', 'US.HD', 'US.PG', 'US.KO', 'US.PEP',
-            'US.COST', 'US.NKE', 'US.MCD', 'US.SBUX', 'US.DIS',
-            # Industrial
-            'US.BA', 'US.CAT', 'US.GE', 'US.MMM', 'US.HON',
-            'US.UPS', 'US.LMT', 'US.RTX', 'US.DE', 'US.UNP',
-            # Energy
-            'US.XOM', 'US.CVX', 'US.COP', 'US.SLB', 'US.EOG',
-            # Communication
-            'US.T', 'US.VZ', 'US.NFLX', 'US.CMCSA', 'US.TMUS',
-            # Others
-            'US.BRK.B', 'US.BABA', 'US.CRM', 'US.PYPL', 'US.SQ',
+            # Top Finance (6)
+            'US.JPM', 'US.BAC', 'US.WFC', 'US.GS', 'US.MS', 'US.V',
+            # Top Healthcare (5)
+            'US.JNJ', 'US.UNH', 'US.PFE', 'US.ABBV', 'US.LLY',
+            # Top Consumer (5)
+            'US.WMT', 'US.HD', 'US.PG', 'US.KO', 'US.NKE',
+            # Top Industrial (4)
+            'US.BA', 'US.CAT', 'US.GE', 'US.HON',
         ]
         
+        # Use config setting
+        universe_size = min(len(us_stocks), config.SCANNER_UNIVERSE_SIZE)
+        selected_stocks = us_stocks[:universe_size]
+        
         print(f"\n{'='*80}")
-        print(f"STOCK UNIVERSE: {len(us_stocks)} stocks")
+        print(f"STOCK UNIVERSE: {len(selected_stocks)} stocks (optimized for API limits)")
+        print(f"{'='*80}")
+        print(f"Rate limit: {config.API_RATE_LIMIT} requests/minute")
+        print(f"Estimated time: {(len(selected_stocks) / config.API_RATE_LIMIT * 60):.1f} minutes")
         print(f"{'='*80}\n")
         
-        return us_stocks
+        return selected_stocks
     
     def analyze_single_stock(self, symbol: str, mode: str = 'quick') -> StockScore:
         """Analyze a single stock"""
