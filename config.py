@@ -29,8 +29,10 @@ WF_STEP_SIZE = 50
 SCANNER_MIN_PRICE = 10.0
 SCANNER_MAX_PRICE = 500.0
 SCANNER_MIN_VOLUME = 2000000
-SCANNER_MAX_WORKERS = 5
-
+SCANNER_MAX_WORKERS = 1  # Sequential processing
+SCANNER_UNIVERSE_SIZE = 30  # Reduced universe
+SCANNER_ENABLE_PARALLEL = False  # Disabled due to API limits
+SCANNER_SHOW_PROGRESS = True  # Show progress
 # Data Paths
 DATA_PATH = './data'
 SCAN_PATH = './data/scans'
