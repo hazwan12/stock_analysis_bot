@@ -218,10 +218,22 @@ class StockUniverseScanner:
                      symbols: Optional[List[str]] = None,
                      mode: str = 'quick',
                      top_n: int = 20,
-                     parallel: bool = True) -> pd.DataFrame:
-        """Scan stock universe"""
+                     parallel: bool = None) -> pd.DataFrame:
+        """Scan stock universe (with API rate limiting)"""
+        
+        # Force sequential processing due to API limits
+        if parallel is None:
+            parallel = config.SCANNER_ENABLE_PARALLEL
+        
+        if parallel and config.SCANNER_ENABLE_PARALLEL:
+            print("⚠️  Parallel processing disabled due to API rate limits")
+            parallel = False
+        
         print(f"\n{'='*80}")
         print(f"UNIVERSE SCAN - MODE: {mode.upper()}")
+        print(f"{'='*80}")
+        print(f"API Rate Limit: {config.API_RATE_LIMIT} requests/minute")
+        print(f"Processing: Sequential (API compliant)")
         print(f"{'='*80}\n")
         
         if symbols is None:
@@ -229,64 +241,43 @@ class StockUniverseScanner:
         
         start_time = time.time()
         
-        if parallel and len(symbols) > 5:
-            print(f"⚡ Parallel processing ({self.max_workers} workers)")
-            results = []
-            
-            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                future_to_symbol = {
-                    executor.submit(self.analyze_single_stock, symbol, mode): symbol 
-                    for symbol in symbols
-                }
-                
-                completed = 0
-                for future in as_completed(future_to_symbol):
-                    symbol = future_to_symbol[future]
-                    try:
-                        result = future.result()
-                        results.append(result)
-                        completed += 1
-                        
-                        # Show progress with status
-                        status_emoji = "✓" if result.status == "OK" else "✗"
-                        print(f"{status_emoji} {symbol}: {result.status}")
-                        
-                        if completed % 10 == 0:
-                            elapsed = time.time() - start_time
-                            rate = completed / elapsed
-                            remaining = len(symbols) - completed
-                            eta = remaining / rate if rate > 0 else 0
-                            print(f"Progress: {completed}/{len(symbols)} ({completed/len(symbols)*100:.1f}%) | ETA: {eta/60:.1f} min")
-                    except Exception as e:
-                        print(f"✗ Failed {symbol}: {e}")
-                        # Still append a failed result
-                        results.append(StockScore(symbol=symbol, status="ERROR", error_msg=str(e)))
-        else:
-            print(f"📊 Sequential processing")
-            results = []
-            for i, symbol in enumerate(symbols, 1):
-                print(f"\nAnalyzing {symbol} ({i}/{len(symbols)})...")
+        # Progress tracking
+        from utils.rate_limiter import ProgressTracker
+        progress = ProgressTracker(len(symbols), f"{mode.upper()} Scan")
+        
+        results = []
+        
+        # Sequential processing with rate limiting
+        print(f"📊 Scanning {len(symbols)} stocks sequentially...")
+        print(f"⏱️  Estimated time: {(len(symbols) / config.API_RATE_LIMIT * 60):.1f} minutes\n")
+        
+        for i, symbol in enumerate(symbols, 1):
+            try:
                 result = self.analyze_single_stock(symbol, mode)
                 results.append(result)
                 
-                if i % 10 == 0:
-                    elapsed = time.time() - start_time
-                    rate = i / elapsed
-                    remaining = len(symbols) - i
-                    eta = remaining / rate if rate > 0 else 0
-                    print(f"Progress: {i}/{len(symbols)} | ETA: {eta/60:.1f} min")
+                # Update progress
+                if config.SCANNER_SHOW_PROGRESS:
+                    progress.update(1, symbol)
                 
-                time.sleep(0.5)
+            except Exception as e:
+                print(f"✗ Error analyzing {symbol}: {e}")
+                results.append(StockScore(symbol=symbol, status="ERROR", error_msg=str(e)))
         
         self.results = results
         elapsed = time.time() - start_time
         
+        # Sort by score
         self.results.sort(key=lambda x: x.overall_score, reverse=True)
         
         for i, result in enumerate(self.results, 1):
             result.rank = i
         
         df = pd.DataFrame([r.to_dict() for r in self.results])
+        
+        # Finish progress tracking
+        if config.SCANNER_SHOW_PROGRESS:
+            progress.finish()
         
         print(f"\n{'='*80}")
         print(f"SCAN COMPLETE")
