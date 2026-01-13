@@ -111,7 +111,15 @@ class BacktestEngine:
         
         # Calculate indicators for entire dataset
         analyzer = TrendAnalyzer(data)
+        analyzer.analyze()  # This populates all the indicator columns
         analyzed_data = analyzer.data.copy()
+        
+        # Verify required columns exist
+        required_cols = ['SMA_20', 'SMA_50', 'RSI', 'MACD', 'MACD_Signal', 'BB_Lower', 'BB_Upper']
+        missing_cols = [col for col in required_cols if col not in analyzed_data.columns]
+        if missing_cols:
+            print(f"❌ Error: Missing indicator columns: {missing_cols}")
+            return {'error': f'Failed to calculate indicators: {missing_cols}'}
         
         # Need at least 50 days for indicators
         start_idx = 50
@@ -168,6 +176,11 @@ class BacktestEngine:
     def _calculate_daily_signal(self, historical_data: pd.DataFrame) -> Dict:
         """Calculate trading signal for a specific day"""
         if len(historical_data) < 50:
+            return {'score': 0, 'signals': []}
+        
+        # Check if indicators exist
+        required_cols = ['SMA_20', 'SMA_50', 'RSI', 'MACD', 'MACD_Signal', 'BB_Lower', 'BB_Upper']
+        if not all(col in historical_data.columns for col in required_cols):
             return {'score': 0, 'signals': []}
         
         latest = historical_data.iloc[-1]
