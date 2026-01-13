@@ -18,6 +18,7 @@ from modules.walk_forward import WalkForwardAnalyzer
 from modules.universe_scanner import StockUniverseScanner
 from modules.portfolio_manager import PortfolioManager
 from modules.portfolio_recommender import PortfolioRecommender
+from modules.paper_trading import PaperTradingSimulator
 from utils.logger import setup_logger
 import config
 
@@ -186,6 +187,7 @@ def portfolio_management_menu(portfolio_id: int):
         print("\nANALYSIS TOOLS:")
         print("  9. Analyze Single Stock")
         print("  10. Backtest Stock Strategy")
+        print("  11. Run Paper Trading Simulation")
         
         print("\n  0. Back to Portfolio Selection")
         print()
@@ -224,6 +226,8 @@ def portfolio_management_menu(portfolio_id: int):
         
         elif choice == '10':
             backtest_stock_for_portfolio(portfolio_id)
+        elif choice == '11':
+            run_paper_trading_simulation(portfolio_id)
         
         else:
             print("❌ Invalid choice")
@@ -562,6 +566,95 @@ def backtest_stock_for_portfolio(portfolio_id: int):
             engine.plot_results(symbol)
     
     api_client.close()
+
+
+def run_paper_trading_simulation(portfolio_id: int):
+    """Run paper trading simulation to test strategy"""
+    print_header("PAPER TRADING SIMULATION")
+    
+    print("📝 This simulates day-by-day trading using historical data")
+    print("   Test your strategy as if you were trading in real-time\n")
+    
+    # Get simulation parameters
+    print("SIMULATION SETUP:")
+    print("-" * 80)
+    
+    try:
+        start_date = input("Start Date (YYYY-MM-DD, e.g., 2024-01-01): ").strip()
+        
+        # Validate date format
+        try:
+            datetime.strptime(start_date, '%Y-%m-%d')
+        except ValueError:
+            print("❌ Invalid date format. Please use YYYY-MM-DD")
+            return
+        
+        num_days = int(input("Number of Days to Simulate (e.g., 30): ").strip())
+        
+        if num_days < 1 or num_days > 365:
+            print("❌ Number of days must be between 1 and 365")
+            return
+        
+        initial_capital = float(input("Initial Capital (default: $10,000): ").strip() or "10000")
+        
+        print("\nSTRATEGY SETTINGS:")
+        buy_threshold = int(input(f"Buy Signal Threshold (default: {config.DEFAULT_BUY_THRESHOLD}): ").strip() or str(config.DEFAULT_BUY_THRESHOLD))
+        sell_threshold = int(input(f"Sell Signal Threshold (default: {config.DEFAULT_SELL_THRESHOLD}): ").strip() or str(config.DEFAULT_SELL_THRESHOLD))
+        
+        print("\nEXECUTION MODE:")
+        print("  1. Auto-Execute (Automatically follow all recommendations)")
+        print("  2. Manual Review (Review each day's recommendations)")
+        mode_choice = input("Your choice (default: 1): ").strip() or "1"
+        auto_execute = (mode_choice == "1")
+        
+        # Confirm settings
+        print("\n" + "=" * 80)
+        print("SIMULATION PARAMETERS:")
+        print("=" * 80)
+        print(f"Start Date:        {start_date}")
+        print(f"Duration:          {num_days} days")
+        print(f"Initial Capital:   ${initial_capital:,.2f}")
+        print(f"Buy Threshold:     {buy_threshold}")
+        print(f"Sell Threshold:    {sell_threshold}")
+        print(f"Auto-Execute:      {'Yes' if auto_execute else 'No (Manual Review)'}")
+        print(f"Estimated Time:    {num_days * 2} seconds")
+        print("=" * 80)
+        
+        confirm = input("\nStart simulation? (y/n): ").strip().lower()
+        
+        if confirm != 'y':
+            print("❌ Simulation cancelled")
+            return
+        
+        # Run simulation
+        simulator = PaperTradingSimulator(initial_capital=initial_capital)
+        
+        results = simulator.run_simulation(
+            start_date=start_date,
+            num_days=num_days,
+            auto_execute=auto_execute,
+            buy_threshold=buy_threshold,
+            sell_threshold=sell_threshold
+        )
+        
+        # Ask if user wants to save results
+        if results:
+            save = input("\nSave simulation results to CSV? (y/n): ").strip().lower()
+            
+            if save == 'y':
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = f"{config.BACKTEST_PATH}/paper_trading_sim_{timestamp}.csv"
+                
+                # Create results dataframe
+                results_df = pd.DataFrame([results])
+                results_df.to_csv(filename, index=False)
+                
+                print(f"✅ Results saved: {filename}")
+        
+    except ValueError as e:
+        print(f"❌ Invalid input: {e}")
+    except Exception as e:
+        print(f"❌ Error running simulation: {e}")
 
 
 def main():
