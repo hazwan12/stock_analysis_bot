@@ -226,6 +226,7 @@ def portfolio_management_menu(portfolio_id: int):
         
         elif choice == '10':
             backtest_stock_for_portfolio(portfolio_id)
+
         elif choice == '11':
             run_paper_trading_simulation(portfolio_id)
         
@@ -572,61 +573,200 @@ def run_paper_trading_simulation(portfolio_id: int):
     """Run paper trading simulation to test strategy"""
     print_header("PAPER TRADING SIMULATION")
     
-    print("📝 This simulates day-by-day trading using historical data")
-    print("   Test your strategy as if you were trading in real-time\n")
+    print("📝 Day-by-day trading simulation using historical data")
+    print("   Unlike backtesting, this shows you each day's decisions in sequence")
+    print("   Perfect for understanding the 'lived experience' of your strategy
+")
     
-    # Get simulation parameters
-    print("SIMULATION SETUP:")
+    # Quick start vs custom configuration
+    print("SIMULATION MODE:")
     print("-" * 80)
+    print("  Q. Quick Start    - 30 days, default settings (recommended for first try)")
+    print("  C. Custom Setup   - Full control over all parameters")
+    print()
+    
+    mode = input("Your choice (Q/C, default: Q): ").strip().upper() or "Q"
     
     try:
-        start_date = input("Start Date (YYYY-MM-DD, e.g., 2024-01-01): ").strip()
+        if mode == 'Q':
+            # Quick start with sensible defaults
+            from datetime import timedelta
+            start_date = (datetime.now() - timedelta(days=60)).strftime('%Y-%m-%d')
+            num_days = 30
+            initial_capital = 10000.0
+            buy_threshold = config.DEFAULT_BUY_THRESHOLD
+            sell_threshold = config.DEFAULT_SELL_THRESHOLD
+            auto_execute = True
+            
+            print("
+🚀 QUICK START CONFIGURATION:")
+            print("=" * 80)
+            print(f"Start Date:        {start_date} (~60 days ago)")
+            print(f"Duration:          {num_days} trading days")
+            print(f"Initial Capital:   ${initial_capital:,.2f}")
+            print(f"Buy Threshold:     {buy_threshold} (Buy on scores >= {buy_threshold})")
+            print(f"Sell Threshold:    {sell_threshold} (Sell on scores <= {sell_threshold})")
+            print(f"Execution Mode:    Auto-Execute")
+            print(f"Estimated Time:    ~{num_days * 2} seconds ({num_days} days × 2 sec/day)")
+            print("=" * 80)
+            
+            confirm = input("
+Start quick simulation? (y/n): ").strip().lower()
+            if confirm != 'y':
+                print("❌ Simulation cancelled")
+                return
         
-        # Validate date format
-        try:
-            datetime.strptime(start_date, '%Y-%m-%d')
-        except ValueError:
-            print("❌ Invalid date format. Please use YYYY-MM-DD")
-            return
-        
-        num_days = int(input("Number of Days to Simulate (e.g., 30): ").strip())
-        
-        if num_days < 1 or num_days > 365:
-            print("❌ Number of days must be between 1 and 365")
-            return
-        
-        initial_capital = float(input("Initial Capital (default: $10,000): ").strip() or "10000")
-        
-        print("\nSTRATEGY SETTINGS:")
-        buy_threshold = int(input(f"Buy Signal Threshold (default: {config.DEFAULT_BUY_THRESHOLD}): ").strip() or str(config.DEFAULT_BUY_THRESHOLD))
-        sell_threshold = int(input(f"Sell Signal Threshold (default: {config.DEFAULT_SELL_THRESHOLD}): ").strip() or str(config.DEFAULT_SELL_THRESHOLD))
-        
-        print("\nEXECUTION MODE:")
-        print("  1. Auto-Execute (Automatically follow all recommendations)")
-        print("  2. Manual Review (Review each day's recommendations)")
-        mode_choice = input("Your choice (default: 1): ").strip() or "1"
-        auto_execute = (mode_choice == "1")
-        
-        # Confirm settings
-        print("\n" + "=" * 80)
-        print("SIMULATION PARAMETERS:")
-        print("=" * 80)
-        print(f"Start Date:        {start_date}")
-        print(f"Duration:          {num_days} days")
-        print(f"Initial Capital:   ${initial_capital:,.2f}")
-        print(f"Buy Threshold:     {buy_threshold}")
-        print(f"Sell Threshold:    {sell_threshold}")
-        print(f"Auto-Execute:      {'Yes' if auto_execute else 'No (Manual Review)'}")
-        print(f"Estimated Time:    {num_days * 2} seconds")
-        print("=" * 80)
-        
-        confirm = input("\nStart simulation? (y/n): ").strip().lower()
-        
-        if confirm != 'y':
-            print("❌ Simulation cancelled")
-            return
+        else:
+            # Custom configuration with better UX
+            print("
+📋 CUSTOM CONFIGURATION:")
+            print("=" * 80)
+            
+            # Date selection with presets
+            print("
+START DATE:")
+            print("  1. 30 days ago")
+            print("  2. 60 days ago (recommended)")
+            print("  3. 90 days ago")
+            print("  4. Custom date (YYYY-MM-DD)")
+            
+            date_choice = input("
+Your choice (1-4, default: 2): ").strip() or "2"
+            
+            from datetime import timedelta
+            if date_choice == "1":
+                start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+            elif date_choice == "2":
+                start_date = (datetime.now() - timedelta(days=60)).strftime('%Y-%m-%d')
+            elif date_choice == "3":
+                start_date = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+            else:
+                while True:
+                    start_date = input("Enter date (YYYY-MM-DD, e.g., 2024-01-01): ").strip()
+                    try:
+                        input_date = datetime.strptime(start_date, '%Y-%m-%d')
+                        if input_date >= datetime.now():
+                            print("⚠️  Date must be in the past")
+                        elif input_date < datetime.now() - timedelta(days=730):
+                            confirm = input("⚠️  Date is >2 years old. Data may be limited. Continue? (y/n): ").lower()
+                            if confirm == 'y':
+                                break
+                        else:
+                            break
+                    except ValueError:
+                        print("❌ Invalid format. Use YYYY-MM-DD")
+            
+            print(f"✓ Start date: {start_date}")
+            
+            # Number of days with validation
+            while True:
+                try:
+                    days_input = input("
+Number of days to simulate (1-365, default: 30): ").strip()
+                    if not days_input:
+                        num_days = 30
+                        break
+                    num_days = int(days_input)
+                    if 1 <= num_days <= 365:
+                        break
+                    else:
+                        print("⚠️  Please enter a number between 1 and 365")
+                except ValueError:
+                    print("⚠️  Please enter a valid number")
+            
+            print(f"✓ Duration: {num_days} days")
+            
+            # Capital with better validation
+            while True:
+                try:
+                    capital_input = input("
+Initial capital (e.g., 10000 or 10,000, default: $10,000): ").strip()
+                    if not capital_input:
+                        initial_capital = 10000.0
+                        break
+                    # Remove formatting
+                    capital_input = capital_input.replace('$', '').replace(',', '')
+                    initial_capital = float(capital_input)
+                    
+                    if initial_capital <= 0:
+                        print("⚠️  Capital must be positive")
+                    elif initial_capital < 1000:
+                        confirm = input(f"⚠️  ${initial_capital:,.2f} is quite low. Continue? (y/n): ").lower()
+                        if confirm == 'y':
+                            break
+                    elif initial_capital > 1000000:
+                        confirm = input(f"💰 ${initial_capital:,.2f} is large. Confirm? (y/n): ").lower()
+                        if confirm == 'y':
+                            break
+                    else:
+                        break
+                except ValueError:
+                    print("⚠️  Please enter a valid dollar amount")
+            
+            print(f"✓ Capital: ${initial_capital:,.2f}")
+            
+            # Strategy settings
+            print("
+STRATEGY SETTINGS:")
+            while True:
+                try:
+                    buy_input = input(f"Buy signal threshold (default: {config.DEFAULT_BUY_THRESHOLD}): ").strip()
+                    buy_threshold = int(buy_input) if buy_input else config.DEFAULT_BUY_THRESHOLD
+                    if -5 <= buy_threshold <= 5:
+                        break
+                    print("⚠️  Threshold must be between -5 and 5")
+                except ValueError:
+                    print("⚠️  Please enter a valid number")
+            
+            while True:
+                try:
+                    sell_input = input(f"Sell signal threshold (default: {config.DEFAULT_SELL_THRESHOLD}): ").strip()
+                    sell_threshold = int(sell_input) if sell_input else config.DEFAULT_SELL_THRESHOLD
+                    if -5 <= sell_threshold <= 5:
+                        break
+                    print("⚠️  Threshold must be between -5 and 5")
+                except ValueError:
+                    print("⚠️  Please enter a valid number")
+            
+            print(f"✓ Thresholds: Buy={buy_threshold}, Sell={sell_threshold}")
+            
+            # Execution mode
+            print("
+EXECUTION MODE:")
+            print("  1. Auto-Execute (Automatically follow all recommendations)")
+            print("  2. Manual Review (Review each day, more educational)")
+            mode_choice = input("
+Your choice (1-2, default: 1): ").strip() or "1"
+            auto_execute = (mode_choice == "1")
+            
+            print(f"✓ Mode: {'Auto-Execute' if auto_execute else 'Manual Review'}")
+            
+            # Final confirmation
+            print("
+" + "=" * 80)
+            print("SIMULATION SUMMARY:")
+            print("=" * 80)
+            print(f"Start Date:        {start_date}")
+            print(f"Duration:          {num_days} trading days")
+            print(f"Initial Capital:   ${initial_capital:,.2f}")
+            print(f"Buy Threshold:     {buy_threshold}")
+            print(f"Sell Threshold:    {sell_threshold}")
+            print(f"Execution Mode:    {'Auto-Execute' if auto_execute else 'Manual Review'}")
+            print(f"Estimated Time:    ~{num_days * 2} seconds")
+            print("=" * 80)
+            
+            confirm = input("
+Start simulation? (y/n): ").strip().lower()
+            if confirm != 'y':
+                print("❌ Simulation cancelled")
+                return
         
         # Run simulation
+        print("
+🚀 Starting simulation...")
+        print("Progress will be shown below.
+")
+        
         simulator = PaperTradingSimulator(initial_capital=initial_capital)
         
         results = simulator.run_simulation(
@@ -637,24 +777,43 @@ def run_paper_trading_simulation(portfolio_id: int):
             sell_threshold=sell_threshold
         )
         
-        # Ask if user wants to save results
+        # Post-simulation options
         if results:
-            save = input("\nSave simulation results to CSV? (y/n): ").strip().lower()
+            print("
+" + "=" * 80)
+            print("SIMULATION COMPLETE!")
+            print("=" * 80)
+            print(f"✓ Chart saved to: data/charts/paper_trading_*.png")
+            print()
+            
+            save = input("Save detailed results to CSV? (y/n): ").strip().lower()
             
             if save == 'y':
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 filename = f"{config.BACKTEST_PATH}/paper_trading_sim_{timestamp}.csv"
                 
-                # Create results dataframe
                 results_df = pd.DataFrame([results])
                 results_df.to_csv(filename, index=False)
                 
                 print(f"✅ Results saved: {filename}")
+                print("💡 TIP: Compare multiple runs by checking the data/backtests/ folder")
+            
+            # Option to run again
+            print()
+            run_again = input("Run another simulation with different parameters? (y/n): ").strip().lower()
+            if run_again == 'y':
+                run_paper_trading_simulation(portfolio_id)
         
     except ValueError as e:
         print(f"❌ Invalid input: {e}")
+        print("💡 TIP: Try Quick Start mode (Q) for easier setup")
+    except KeyboardInterrupt:
+        print("
+
+⚠️  Simulation interrupted by user")
     except Exception as e:
         print(f"❌ Error running simulation: {e}")
+        print("💡 TIP: Check that MooMoo API is connected and data is available")
 
 
 def main():
